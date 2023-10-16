@@ -13,7 +13,8 @@ requested variables throughout each step is also returned.
 """
 function symplectic_integrate(
     x₀::AbstractVector{T}, p₀, Λ, U, δUδx=x->gradient(U,x)[1]; 
-    sigma=nothing, N=50, ϵ=T(0.1), progress=false, history_keys=nothing
+    N=50, ϵ=T(0.1),
+    sigma=nothing, inv_sigma=nothing, progress=false, history_keys=nothing
 ) where {T}
     
     xᵢ, pᵢ = x₀, p₀
@@ -25,7 +26,7 @@ function symplectic_integrate(
     @showprogress (progress ? 1 : Inf) "Symplectic Integration: " for i=1:N
         # Move to latent space
         if sigma!=nothing
-            xᵢ, pᵢ = xᵢ ./ sigma, pᵢ .* sigma
+            xᵢ, pᵢ = inv_sigma * xᵢ, sigma * pᵢ 
         end 
 
         xᵢ₊₁    = xᵢ - T(ϵ) * (Λ \ (pᵢ - T(ϵ)/2 * δUδxᵢ))
@@ -412,7 +413,7 @@ end
     @pack! state = ϕ°, Ω, ΔH, accept
 end
 
-function hmc_step(rng::AbstractRNG, U, x, Λ, δUδx=x->gradient(U, x)[1]; symp_kwargs, progress, always_accept, sigma=nothing)
+function hmc_step(rng::AbstractRNG, U, x, Λ, δUδx=x->gradient(U, x)[1]; symp_kwargs, progress, always_accept, sigma=nothing, inv_sigma=nothing)
     local ΔH, accept
     for kwargs in symp_kwargs
         p = simulate(rng, Λ)
@@ -420,6 +421,7 @@ function hmc_step(rng::AbstractRNG, U, x, Λ, δUδx=x->gradient(U, x)[1]; symp_
             x, p, Λ, U, δUδx;
             progress = (progress==:verbose),
             sigma = sigma,
+            inv_sigma = inv_sigma,
             kwargs...
         )
         accept = batch(@. always_accept | (log(rand()) < $unbatch(ΔH)))
